@@ -1,277 +1,598 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { LayoutGrid, BookOpen, User, Settings, Sparkles, Clock, ChevronRight, PlayCircle, Plus } from 'lucide-react';
+import { LayoutGrid, BookOpen, Settings, Sparkles, Mic, PlayCircle, Plus, X, Upload, Globe, Trash2, Save, Cpu, CheckCircle2, AlertCircle, ToggleLeft, ToggleRight, Music, Loader2, AlertTriangle } from 'lucide-react';
 import { AppView, VideoContent, WordDefinition, Flashcard } from './types';
 import { MOCK_VIDEOS, CATEGORIES } from './constants';
 import VideoPlayer from './components/VideoPlayer';
 import InteractiveTranscript from './components/InteractiveTranscript';
+import { getSettings, saveSettings, UserSettings } from './lib/userSettings';
+import { aiRouter } from './lib/ai/router';
+
+// --- Constants for UI Options ---
+
+const DOUBAO_PRESET_VOICES = [
+  { id: 'BV001_streaming', name: 'BV001 (Universal Female)' },
+  { id: 'BV002_streaming', name: 'BV002 (Universal Male)' },
+  { id: 'BV406_streaming', name: 'BV406 (Affectionate Female)' },
+  { id: 'BV407_streaming', name: 'BV407 (Affectionate Male)' },
+  { id: 'BV051_streaming', name: 'BV051 (Standard Male)' },
+];
+
+const DEEPSEEK_MODELS = [
+  { id: 'deepseek-chat', name: 'DeepSeek-V3.2 (Chat)' },
+  { id: 'deepseek-reasoner', name: 'DeepSeek-R1 (Reasoning)' }
+];
+
+const GEMINI_MODELS = [
+  { id: 'gemini-3-flash-preview', name: 'Gemini 3.0 Flash (Preview)' },
+  { id: 'gemini-2.5-flash-latest', name: 'Gemini 2.5 Flash (Stable)' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' }
+];
 
 const App = () => {
   const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
+  
+  // Content State
+  const [videos, setVideos] = useState<VideoContent[]>(MOCK_VIDEOS);
   const [selectedVideo, setSelectedVideo] = useState<VideoContent | null>(null);
   const [savedWords, setSavedWords] = useState<Flashcard[]>([]);
+  const [activeCategory, setActiveCategory] = useState<string>('All');
   
+  // Settings State
+  const [settings, setSettingsState] = useState<UserSettings>(getSettings());
+  const [expandedProvider, setExpandedProvider] = useState<string | null>('gemini');
+  const [customVoiceInput, setCustomVoiceInput] = useState(false);
+
+  // Import Modal State
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importForm, setImportForm] = useState({ title: '', url: '', category: CATEGORIES[0] });
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
   // Video Player State
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(320); // mock duration
+  const [duration, setDuration] = useState(320);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Load a video
+  useEffect(() => {
+    setSettingsState(getSettings());
+  }, []);
+
+  const handleSaveSettings = () => {
+    saveSettings(settings);
+    aiRouter.refreshProviders();
+    alert('Configuration Saved & Router Updated!');
+  };
+
+  // --- Content Handlers ---
   const handleSelectVideo = (video: VideoContent) => {
     setSelectedVideo(video);
     setCurrentTime(0);
     setIsPlaying(false);
     setCurrentView(AppView.PLAYER);
-    // Parse duration string "MM:SS" to seconds for the mock
     const [m, s] = video.duration.split(':').map(Number);
     setDuration(m * 60 + s);
   };
 
-  // Video Timer Logic (Mock Playback)
+  const handleImportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setImportError(null);
+    setImportLoading(true);
+
+    try {
+        const url = importForm.url.trim();
+        if (!url) throw new Error("URL is required.");
+        
+        // 1. Basic Validation
+        const isYoutube = url.includes('youtube.com') || url.includes('youtu.be');
+        if (!isYoutube) throw new Error("Only YouTube URLs are supported currently.");
+
+        // 2. Simulate Backend API Call (POST /api/import)
+        // In a real app: const res = await fetch('/api/import', { method: 'POST', body: JSON.stringify(importForm) });
+        // We simulate network delay and potential errors.
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        // Simulate failure for specific keyword
+        if (url.includes('error')) throw new Error("Backend Error: Failed to fetch subtitles (CORS/Region blocked).");
+
+        // 3. Create Video Record (Simulate Backend Response)
+        const newVideo: VideoContent = {
+            id: `imported-${Date.now()}`,
+            title: importForm.title || "New Imported Video",
+            thumbnail: `https://picsum.photos/seed/${Date.now()}/800/450`,
+            duration: "05:00", // Mock duration
+            level: "Intermediate", // Default
+            category: importForm.category, // Use selected category
+            date: new Date().toISOString().split('T')[0].replace(/-/g, '/'), // Current date
+            description: `Imported content from ${url}. Automatically generated by EchoSpeak.`,
+            subtitles: [
+               { id: '1', startTime: 0, endTime: 5, text: "This is a placeholder subtitle for the imported video.", translation: "这是导入视频的占位字幕。", speaker: "System" }
+            ]
+        };
+
+        setVideos(prev => [newVideo, ...prev]);
+        setIsImportModalOpen(false);
+        setImportForm({ title: '', url: '', category: CATEGORIES[0] });
+
+    } catch (err) {
+        setImportError((err as Error).message);
+    } finally {
+        setImportLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (isPlaying) {
       timerRef.current = setInterval(() => {
-        setCurrentTime((prev) => {
-          if (prev >= duration) {
-            setIsPlaying(false);
-            return duration;
-          }
-          return prev + 0.1; // 100ms updates
-        });
+        setCurrentTime((prev) => (prev >= duration ? duration : prev + 0.1));
       }, 100);
-    } else if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    } else if (timerRef.current) clearInterval(timerRef.current);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isPlaying, duration]);
 
   const handleSaveWord = (def: WordDefinition, subId: string) => {
     if (!selectedVideo) return;
-    const newCard: Flashcard = {
-      ...def,
-      id: Date.now().toString(),
-      sourceVideoId: selectedVideo.id,
-      timestamp: currentTime
-    };
+    const newCard: Flashcard = { ...def, id: Date.now().toString(), sourceVideoId: selectedVideo.id, timestamp: currentTime };
     setSavedWords(prev => [newCard, ...prev]);
   };
 
-  // Views
-  const renderDashboard = () => (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      {/* Hero Banner */}
-      <div className="bg-gradient-to-r from-pink-500 to-rose-400 rounded-3xl p-8 text-white relative overflow-hidden shadow-lg">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
-        <div className="relative z-10 max-w-2xl">
-          <div className="flex items-center gap-2 mb-4 bg-white/20 w-fit px-3 py-1 rounded-full text-xs font-semibold backdrop-blur-md">
-            <Sparkles size={14} />
-            <span>AI Powered Learning</span>
-          </div>
-          <h1 className="text-4xl font-bold mb-4 leading-tight">Master English with <br/>YouTube Shadowing</h1>
-          <p className="text-white/90 mb-6 max-w-lg">Import your favorite videos, get AI explanations, and practice speaking with real-time feedback.</p>
-          <button className="bg-white text-rose-500 px-6 py-3 rounded-xl font-bold shadow-lg hover:bg-pink-50 transition-colors flex items-center gap-2">
-            <Plus size={20} /> Import Video
-          </button>
-        </div>
-      </div>
+  // --- Helpers for Deep State Update ---
+  const updateProvider = (key: keyof UserSettings['providers'], field: string, value: any) => {
+    setSettingsState(prev => ({
+      ...prev,
+      providers: {
+        ...prev.providers,
+        [key]: {
+          ...prev.providers[key],
+          [field]: value
+        }
+      }
+    }));
+  };
 
-      {/* Categories */}
-      <div>
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-slate-800">Learning Themes</h2>
-          <button className="text-pink-500 text-sm font-medium hover:underline">View all</button>
-        </div>
-        <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide">
-          {CATEGORIES.map((cat, i) => (
-            <button key={i} className="px-6 py-3 bg-white border border-slate-100 rounded-xl whitespace-nowrap text-slate-600 font-medium hover:border-pink-200 hover:text-pink-500 hover:shadow-sm transition-all">
-              {cat}
-            </button>
-          ))}
-        </div>
-      </div>
+  // --- Renderers ---
 
-      {/* Recommended Videos */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {MOCK_VIDEOS.map((video) => (
-          <div 
-            key={video.id} 
-            onClick={() => handleSelectVideo(video)}
-            className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md hover:-translate-y-1 transition-all border border-slate-100 cursor-pointer"
-          >
-            <div className="relative aspect-video overflow-hidden">
-              <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-              <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-md backdrop-blur-sm">
-                {video.duration}
-              </div>
-              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <PlayCircle size={48} className="text-white drop-shadow-lg" />
-              </div>
-            </div>
-            <div className="p-4">
-              <div className="flex gap-2 mb-2">
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded text-white
-                  ${video.level === 'Beginner' ? 'bg-emerald-400' : video.level === 'Intermediate' ? 'bg-amber-400' : 'bg-rose-400'}
-                `}>
-                  {video.level}
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-500">
-                  {video.category}
-                </span>
-              </div>
-              <h3 className="font-bold text-slate-800 leading-snug mb-2 group-hover:text-pink-500 transition-colors line-clamp-2">
-                {video.title}
-              </h3>
-              <p className="text-slate-500 text-sm line-clamp-2 mb-4">{video.description}</p>
-              <div className="flex justify-between items-center text-xs text-slate-400 border-t border-slate-50 pt-3">
-                <span className="flex items-center gap-1"><Clock size={12}/> {video.date}</span>
-                <span>Click to practice</span>
-              </div>
+  const renderDashboard = () => {
+    // Sort videos by date descending (Newest first)
+    const sortedVideos = [...videos].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const filteredVideos = activeCategory === 'All' ? sortedVideos : sortedVideos.filter(v => v.category === activeCategory);
+
+    return (
+      <div className="space-y-8 animate-in fade-in duration-500 pb-10">
+          <div className="bg-gradient-to-r from-pink-500 to-rose-400 rounded-3xl p-8 text-white relative overflow-hidden shadow-lg">
+            <div className="relative z-10 max-w-2xl">
+              <h1 className="text-4xl font-bold mb-4">Master English</h1>
+              <button onClick={() => setIsImportModalOpen(true)} className="bg-white text-rose-500 px-6 py-3 rounded-xl font-bold shadow-lg hover:bg-pink-50 flex items-center gap-2"><Plus size={20} /> Import Video</button>
             </div>
           </div>
-        ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredVideos.map((video) => (
+              <div key={video.id} onClick={() => handleSelectVideo(video)} className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all border border-slate-100 cursor-pointer">
+                <div className="relative aspect-video overflow-hidden">
+                  <img src={video.thumbnail} className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><PlayCircle size={48} className="text-white" /></div>
+                </div>
+                <div className="p-4">
+                  <div className="flex gap-2 mb-2">
+                     <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-500">{video.category}</span>
+                     <span className="text-[10px] text-slate-400 py-0.5">{video.date}</span>
+                  </div>
+                  <h3 className="font-bold text-slate-800 mb-2">{video.title}</h3>
+                  <p className="text-slate-500 text-sm line-clamp-2">{video.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderPlayer = () => {
     if (!selectedVideo) return null;
     return (
       <div className="h-[calc(100vh-2rem)] flex flex-col lg:flex-row gap-6 animate-in slide-in-from-right duration-500">
-        {/* Left Column: Player & Info */}
         <div className="flex-1 flex flex-col gap-6">
-          <div className="flex items-center gap-2 text-sm text-slate-500 mb-[-10px]">
-            <button onClick={() => setCurrentView(AppView.DASHBOARD)} className="hover:text-pink-500">Home</button>
-            <ChevronRight size={14} />
-            <span>{selectedVideo.category}</span>
-          </div>
-          
-          <VideoPlayer 
-            thumbnail={selectedVideo.thumbnail}
-            isPlaying={isPlaying}
-            currentTime={currentTime}
-            duration={duration}
-            onPlayPause={() => setIsPlaying(!isPlaying)}
-            onSeek={(t) => setCurrentTime(t)}
-          />
-
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-            <h1 className="text-2xl font-bold text-slate-800 mb-2">{selectedVideo.title}</h1>
-            <p className="text-slate-600 mb-4">{selectedVideo.description}</p>
-            <div className="flex gap-4">
-              <button className="flex-1 bg-pink-50 text-pink-600 py-2.5 rounded-xl font-medium hover:bg-pink-100 transition-colors flex items-center justify-center gap-2">
-                <BookOpen size={18} /> Full Script
-              </button>
-              <button className="flex-1 bg-slate-50 text-slate-600 py-2.5 rounded-xl font-medium hover:bg-slate-100 transition-colors flex items-center justify-center gap-2">
-                <Sparkles size={18} /> AI Analysis
-              </button>
-            </div>
-          </div>
+          <button onClick={() => setCurrentView(AppView.DASHBOARD)} className="text-sm text-slate-500 hover:text-pink-500">← Back to Dashboard</button>
+          <VideoPlayer thumbnail={selectedVideo.thumbnail} isPlaying={isPlaying} currentTime={currentTime} duration={duration} onPlayPause={() => setIsPlaying(!isPlaying)} onSeek={(t) => setCurrentTime(t)} />
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"><h1 className="text-2xl font-bold text-slate-800">{selectedVideo.title}</h1></div>
         </div>
-
-        {/* Right Column: Interactive Transcript */}
         <div className="lg:w-[450px] h-full">
-           <InteractiveTranscript 
-             subtitles={selectedVideo.subtitles}
-             currentTime={currentTime}
-             onSeek={(t) => {
-               setCurrentTime(t);
-               setIsPlaying(true);
-             }}
-             onSaveWord={handleSaveWord}
-           />
+           <InteractiveTranscript subtitles={selectedVideo.subtitles} currentTime={currentTime} onSeek={(t) => { setCurrentTime(t); setIsPlaying(true); }} onSaveWord={handleSaveWord} />
         </div>
       </div>
     );
   };
 
   const renderFlashcards = () => (
-    <div className="animate-in fade-in zoom-in duration-300">
-      <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-        <Sparkles className="text-pink-500" />
-        Vocabulary Collection
-        <span className="text-sm font-normal text-slate-400 ml-2 bg-slate-100 px-2 py-0.5 rounded-full">{savedWords.length} words</span>
-      </h2>
+    <div className="animate-in fade-in duration-500">
+      <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2"><BookOpen className="text-pink-500" /> Flashcards</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {savedWords.map((card) => (
+          <div key={card.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow relative">
+             <button onClick={(e) => {e.stopPropagation(); setSavedWords(prev => prev.filter(w => w.id !== card.id));}} className="absolute top-4 right-4 text-slate-300 hover:text-red-500"><Trash2 size={18} /></button>
+             <h3 className="text-xl font-bold text-slate-800">{card.word}</h3>
+             <span className="text-sm font-mono text-slate-500">{card.ipa}</span>
+             <p className="text-slate-700 mt-2">{card.meaning}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
-      {savedWords.length === 0 ? (
-        <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
-          <BookOpen className="mx-auto text-slate-300 mb-4" size={48} />
-          <p className="text-slate-500">No words saved yet. Go watch a video and click on words!</p>
-          <button onClick={() => setCurrentView(AppView.DASHBOARD)} className="mt-4 text-pink-500 font-medium hover:underline">Go to Dashboard</button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {savedWords.map((card) => (
-            <div key={card.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-all group relative overflow-hidden">
-               <div className="absolute top-0 left-0 w-1 h-full bg-pink-500"></div>
-               <div className="flex justify-between items-start mb-2">
-                 <h3 className="text-xl font-bold text-slate-800">{card.word}</h3>
-                 <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">{card.type}</span>
-               </div>
-               <div className="text-sm font-mono text-pink-500 mb-3">{card.ipa}</div>
-               <div className="mb-4">
-                 <p className="text-slate-700 font-medium mb-1">{card.meaning}</p>
-               </div>
-               <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-sm text-slate-600 italic">
-                 "{card.example}"
-               </div>
+  // --- Settings Card Component ---
+  const ProviderCard = ({ id, title, icon, enabled, onToggle, children }: any) => {
+    const isExpanded = expandedProvider === id;
+    return (
+      <div className={`bg-white rounded-2xl border transition-all duration-300 ${enabled ? 'border-pink-200 shadow-sm' : 'border-slate-100 opacity-70 grayscale-[0.5]'}`}>
+        <div className="p-5 flex items-center justify-between cursor-pointer" onClick={() => setExpandedProvider(isExpanded ? null : id)}>
+          <div className="flex items-center gap-4">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${enabled ? 'bg-pink-50 text-pink-500' : 'bg-slate-100 text-slate-400'}`}>{icon}</div>
+            <div>
+              <h3 className="font-bold text-slate-800 text-lg">{title}</h3>
+              <div className="flex items-center gap-2 text-xs mt-1">
+                 <span className={`w-2 h-2 rounded-full ${enabled ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+                 <span className="text-slate-500">{enabled ? 'Active' : 'Disabled'}</span>
+              </div>
             </div>
-          ))}
+          </div>
+          <button onClick={(e) => { e.stopPropagation(); onToggle(); }} className={`transition-colors ${enabled ? 'text-pink-500' : 'text-slate-300'}`}>
+             {enabled ? <ToggleRight size={36} /> : <ToggleLeft size={36} />}
+          </button>
         </div>
-      )}
+        {isExpanded && enabled && (
+          <div className="px-5 pb-5 pt-0 animate-in slide-in-from-top-2">
+            <div className="border-t border-slate-100 pt-5 space-y-5">{children}</div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderSettings = () => (
+    <div className="max-w-3xl mx-auto pb-24 animate-in slide-in-from-bottom-4 duration-500">
+      <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2"><Settings className="text-pink-500" /> AI Model Configuration</h2>
+      
+      <div className="space-y-6">
+
+        {/* 0. Gemini */}
+        <ProviderCard 
+          id="gemini" 
+          title="Google Gemini" 
+          icon={<Sparkles size={20} />} 
+          enabled={settings.providers.gemini.enabled}
+          onToggle={() => updateProvider('gemini', 'enabled', !settings.providers.gemini.enabled)}
+        >
+          <div className="grid gap-4">
+             <div>
+               <label className="block text-sm font-semibold text-slate-700 mb-1">API Key</label>
+               <input 
+                 type="password"
+                 className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono text-sm"
+                 value={settings.providers.gemini.apiKey}
+                 onChange={(e) => updateProvider('gemini', 'apiKey', e.target.value)}
+               />
+             </div>
+             <div>
+               <label className="block text-sm font-semibold text-slate-700 mb-1">Model Version</label>
+               <select 
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white"
+                  value={settings.providers.gemini.model}
+                  onChange={(e) => updateProvider('gemini', 'model', e.target.value)}
+               >
+                 {GEMINI_MODELS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+               </select>
+            </div>
+          </div>
+        </ProviderCard>
+
+        {/* 1. DeepSeek */}
+        <ProviderCard 
+          id="deepseek" 
+          title="DeepSeek" 
+          icon={<Cpu size={20} />} 
+          enabled={settings.providers.deepseek.enabled}
+          onToggle={() => updateProvider('deepseek', 'enabled', !settings.providers.deepseek.enabled)}
+        >
+          <div className="grid gap-4">
+            <div>
+               <label className="block text-sm font-semibold text-slate-700 mb-1">Model Name</label>
+               <select 
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white"
+                  value={settings.providers.deepseek.model}
+                  onChange={(e) => updateProvider('deepseek', 'model', e.target.value)}
+               >
+                 {DEEPSEEK_MODELS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+               </select>
+            </div>
+            <div>
+               <label className="block text-sm font-semibold text-slate-700 mb-1">API Key</label>
+               <input 
+                 type="password"
+                 className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono text-sm"
+                 value={settings.providers.deepseek.apiKey}
+                 onChange={(e) => updateProvider('deepseek', 'apiKey', e.target.value)}
+               />
+            </div>
+            <div>
+               <label className="block text-sm font-semibold text-slate-700 mb-1">Base URL</label>
+               <input 
+                 type="text" 
+                 className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-500 font-mono text-sm"
+                 value={settings.providers.deepseek.baseUrl}
+                 readOnly
+               />
+            </div>
+          </div>
+        </ProviderCard>
+
+        {/* 2. Qwen Text */}
+        <ProviderCard 
+          id="qwenText" 
+          title="Qwen (Text)" 
+          icon={<Globe size={20} />} 
+          enabled={settings.providers.qwenText.enabled}
+          onToggle={() => updateProvider('qwenText', 'enabled', !settings.providers.qwenText.enabled)}
+        >
+          <div className="grid gap-4">
+             <div>
+               <label className="block text-sm font-semibold text-slate-700 mb-1">Model</label>
+               <input type="text" className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-500" value="qwen-plus" readOnly />
+             </div>
+             <div>
+               <label className="block text-sm font-semibold text-slate-700 mb-1">API Key (DashScope)</label>
+               <input 
+                 type="password"
+                 className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono text-sm"
+                 value={settings.providers.qwenText.apiKey}
+                 onChange={(e) => updateProvider('qwenText', 'apiKey', e.target.value)}
+               />
+             </div>
+          </div>
+        </ProviderCard>
+
+        {/* 3. Qwen Audio */}
+        <ProviderCard 
+          id="qwenAudio" 
+          title="Qwen (Audio Understanding)" 
+          icon={<Music size={20} />} 
+          enabled={settings.providers.qwenAudio.enabled}
+          onToggle={() => updateProvider('qwenAudio', 'enabled', !settings.providers.qwenAudio.enabled)}
+        >
+           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 mb-2">
+              Note: Used for understanding audio context, separate from Text chat.
+           </div>
+           <div className="grid gap-4">
+             <div>
+               <label className="block text-sm font-semibold text-slate-700 mb-1">Model</label>
+               <input type="text" className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-500" value="qwen2-audio-instruct" readOnly />
+             </div>
+             <div>
+               <label className="block text-sm font-semibold text-slate-700 mb-1">API Key (DashScope)</label>
+               <input 
+                 type="password"
+                 className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono text-sm"
+                 value={settings.providers.qwenAudio.apiKey}
+                 onChange={(e) => updateProvider('qwenAudio', 'apiKey', e.target.value)}
+               />
+             </div>
+          </div>
+        </ProviderCard>
+
+        {/* 4. Doubao TTS */}
+        <ProviderCard 
+          id="doubao" 
+          title="Doubao TTS (Volcengine)" 
+          icon={<Mic size={20} />} 
+          enabled={settings.providers.doubao.enabled}
+          onToggle={() => updateProvider('doubao', 'enabled', !settings.providers.doubao.enabled)}
+        >
+          <div className="grid gap-4">
+             <div className="grid grid-cols-2 gap-4">
+               <div>
+                 <label className="block text-sm font-semibold text-slate-700 mb-1">App ID</label>
+                 <input 
+                   type="text" className="w-full px-3 py-2 rounded-lg border border-slate-200"
+                   value={settings.providers.doubao.appId}
+                   onChange={(e) => updateProvider('doubao', 'appId', e.target.value)}
+                 />
+               </div>
+               <div>
+                 <label className="block text-sm font-semibold text-slate-700 mb-1">Cluster</label>
+                 <input 
+                   type="text" className="w-full px-3 py-2 rounded-lg border border-slate-200"
+                   value={settings.providers.doubao.cluster}
+                   onChange={(e) => updateProvider('doubao', 'cluster', e.target.value)}
+                   placeholder="volcano_tts"
+                 />
+               </div>
+             </div>
+             <div>
+                 <label className="block text-sm font-semibold text-slate-700 mb-1">Access Token</label>
+                 <input 
+                   type="password" className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono text-sm"
+                   value={settings.providers.doubao.accessToken}
+                   onChange={(e) => updateProvider('doubao', 'accessToken', e.target.value)}
+                 />
+             </div>
+             <div>
+                 <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-semibold text-slate-700">Voice Type</label>
+                    <button onClick={() => setCustomVoiceInput(!customVoiceInput)} className="text-xs text-pink-500 underline">
+                       {customVoiceInput ? "Switch to Preset" : "Enter Manual ID"}
+                    </button>
+                 </div>
+                 {customVoiceInput ? (
+                    <input 
+                       type="text" className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
+                       value={settings.providers.doubao.voiceType}
+                       onChange={(e) => updateProvider('doubao', 'voiceType', e.target.value)}
+                       placeholder="e.g., BV001_streaming"
+                    />
+                 ) : (
+                    <select 
+                       className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white"
+                       value={settings.providers.doubao.voiceType}
+                       onChange={(e) => updateProvider('doubao', 'voiceType', e.target.value)}
+                    >
+                       {DOUBAO_PRESET_VOICES.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                    </select>
+                 )}
+             </div>
+             <div>
+                 <label className="block text-sm font-semibold text-slate-700 mb-1">CORS Proxy URL (Required for Browser)</label>
+                 <input 
+                   type="text" className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm font-mono"
+                   value={settings.providers.doubao.proxyUrl}
+                   onChange={(e) => updateProvider('doubao', 'proxyUrl', e.target.value)}
+                   placeholder="https://my-proxy..."
+                 />
+             </div>
+          </div>
+        </ProviderCard>
+
+        {/* 5. NewAPI */}
+        <ProviderCard 
+          id="newapi" 
+          title="NewAPI / OpenAI Gateway" 
+          icon={<Globe size={20} />} 
+          enabled={settings.providers.newapi.enabled}
+          onToggle={() => updateProvider('newapi', 'enabled', !settings.providers.newapi.enabled)}
+        >
+          <div className="grid gap-4">
+             <div className="flex items-center gap-2 mb-2">
+                 <input 
+                    type="checkbox" 
+                    id="fallback"
+                    checked={settings.providers.newapi.isFallback}
+                    onChange={(e) => updateProvider('newapi', 'isFallback', e.target.checked)}
+                    className="w-4 h-4 text-pink-500 rounded border-gray-300"
+                 />
+                 <label htmlFor="fallback" className="text-sm text-slate-700">Use as Global Fallback</label>
+             </div>
+             <div>
+                 <label className="block text-sm font-semibold text-slate-700 mb-1">Base URL</label>
+                 <input 
+                   type="text" className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono text-sm"
+                   value={settings.providers.newapi.baseUrl}
+                   onChange={(e) => updateProvider('newapi', 'baseUrl', e.target.value)}
+                 />
+             </div>
+             <div>
+                 <label className="block text-sm font-semibold text-slate-700 mb-1">API Key</label>
+                 <input 
+                   type="password" className="w-full px-3 py-2 rounded-lg border border-slate-200 font-mono text-sm"
+                   value={settings.providers.newapi.apiKey}
+                   onChange={(e) => updateProvider('newapi', 'apiKey', e.target.value)}
+                 />
+             </div>
+             <div>
+                 <label className="block text-sm font-semibold text-slate-700 mb-1">Model Name</label>
+                 <input 
+                   type="text" className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
+                   value={settings.providers.newapi.model}
+                   onChange={(e) => updateProvider('newapi', 'model', e.target.value)}
+                 />
+             </div>
+          </div>
+        </ProviderCard>
+
+      </div>
+
+      <button 
+        onClick={handleSaveSettings}
+        className="fixed bottom-6 right-6 lg:right-[calc(50%-24rem)] lg:translate-x-full w-auto bg-slate-900 text-white px-8 py-4 rounded-full font-bold shadow-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-3 z-30"
+      >
+        <Save size={20} /> Save Changes
+      </button>
     </div>
   );
 
   return (
     <div className="min-h-screen flex bg-[#F8FAFC]">
-      {/* Sidebar Navigation */}
-      <nav className="w-20 bg-white border-r border-slate-100 flex flex-col items-center py-8 gap-8 fixed h-full z-20">
-        <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-rose-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-pink-200">
-          E
-        </div>
-        
-        <div className="flex flex-col gap-6 w-full">
-          <button 
-            onClick={() => setCurrentView(AppView.DASHBOARD)}
-            className={`p-3 mx-auto rounded-xl transition-all relative group
-              ${currentView === AppView.DASHBOARD ? 'bg-pink-50 text-pink-600' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}
-            `}
-          >
-            <LayoutGrid size={24} />
-            {currentView === AppView.DASHBOARD && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-pink-500 rounded-r-full" />}
-            <span className="absolute left-14 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">Explore</span>
-          </button>
+      {isImportModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+                <div className="p-6 border-b flex justify-between items-center bg-slate-50/50">
+                    <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                        <Upload className="text-pink-500" size={20} /> Import Material
+                    </h3>
+                    <button onClick={() => setIsImportModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                </div>
+                
+                <form onSubmit={handleImportSubmit} className="p-6 space-y-4">
+                    {importError && (
+                        <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex gap-2 items-start">
+                            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                            <span>{importError}</span>
+                        </div>
+                    )}
 
-          <button 
-             onClick={() => setCurrentView(AppView.FLASHCARDS)}
-             className={`p-3 mx-auto rounded-xl transition-all relative group
-              ${currentView === AppView.FLASHCARDS ? 'bg-pink-50 text-pink-600' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}
-            `}
-          >
-            <BookOpen size={24} />
-            {currentView === AppView.FLASHCARDS && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-pink-500 rounded-r-full" />}
-             <span className="absolute left-14 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">Flashcards</span>
-          </button>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">YouTube URL</label>
+                      <input 
+                        className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500" 
+                        placeholder="https://youtube.com/watch?v=..." 
+                        required 
+                        value={importForm.url} 
+                        onChange={e=>setImportForm({...importForm, url:e.target.value})}
+                        disabled={importLoading}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Title (Optional)</label>
+                      <input 
+                        className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500" 
+                        placeholder="My Learning Video" 
+                        value={importForm.title} 
+                        onChange={e=>setImportForm({...importForm, title:e.target.value})}
+                        disabled={importLoading}
+                      />
+                    </div>
 
-          <button className="p-3 mx-auto rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all">
-            <User size={24} />
-          </button>
-        </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                        <select 
+                            className="w-full px-4 py-2 rounded-xl border border-slate-200 bg-white"
+                            value={importForm.category}
+                            onChange={e => setImportForm({...importForm, category: e.target.value})}
+                            disabled={importLoading}
+                        >
+                            {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                        </select>
+                    </div>
 
-        <div className="mt-auto">
-          <button className="p-3 mx-auto rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all">
-            <Settings size={24} />
-          </button>
-        </div>
+                    <div className="pt-2">
+                        <button 
+                            type="submit" 
+                            className={`w-full py-2.5 rounded-xl font-medium text-white shadow-lg transition-all flex items-center justify-center gap-2
+                                ${importLoading ? 'bg-pink-300 cursor-not-allowed' : 'bg-pink-500 hover:bg-pink-600 shadow-pink-200 active:scale-95'}
+                            `}
+                            disabled={importLoading}
+                        >
+                            {importLoading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+                            {importLoading ? 'Analyzing & Importing...' : 'Start Import'}
+                        </button>
+                    </div>
+                    <p className="text-xs text-center text-slate-400">
+                        This will send the URL to our backend for subtitle extraction and AI analysis.
+                    </p>
+                </form>
+            </div>
+          </div>
+      )}
+      <nav className="w-20 bg-white border-r border-slate-100 flex flex-col items-center py-8 gap-8 fixed h-full z-20 shadow-sm">
+        <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-rose-600 rounded-xl flex items-center justify-center text-white font-bold text-xl cursor-pointer" onClick={() => setCurrentView(AppView.DASHBOARD)}>E</div>
+        <button onClick={() => setCurrentView(AppView.DASHBOARD)} className={`p-3 rounded-xl ${currentView === AppView.DASHBOARD ? 'bg-pink-50 text-pink-500' : 'text-slate-400'}`}><LayoutGrid /></button>
+        <button onClick={() => setCurrentView(AppView.FLASHCARDS)} className={`p-3 rounded-xl ${currentView === AppView.FLASHCARDS ? 'bg-pink-50 text-pink-500' : 'text-slate-400'}`}><BookOpen /></button>
+        <button onClick={() => setCurrentView(AppView.SETTINGS)} className={`p-3 rounded-xl mt-auto ${currentView === AppView.SETTINGS ? 'bg-pink-50 text-pink-500' : 'text-slate-400'}`}><Settings /></button>
       </nav>
-
-      {/* Main Content Area */}
       <main className="pl-20 w-full min-h-screen">
         <div className="max-w-7xl mx-auto p-6 md:p-8">
           {currentView === AppView.DASHBOARD && renderDashboard()}
           {currentView === AppView.PLAYER && renderPlayer()}
           {currentView === AppView.FLASHCARDS && renderFlashcards()}
+          {currentView === AppView.SETTINGS && renderSettings()}
         </div>
       </main>
     </div>

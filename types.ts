@@ -1,7 +1,8 @@
 export enum AppView {
   DASHBOARD = 'DASHBOARD',
   PLAYER = 'PLAYER',
-  FLASHCARDS = 'FLASHCARDS'
+  FLASHCARDS = 'FLASHCARDS',
+  SETTINGS = 'SETTINGS'
 }
 
 export interface Subtitle {
