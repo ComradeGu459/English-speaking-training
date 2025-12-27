@@ -1,0 +1,7 @@
+{
+  "name": "EchoSpeak - English Learning",
+  "description": "A specialized spoken English practice app featuring video shadowing, interactive subtitles, and AI-powered flashcards.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
