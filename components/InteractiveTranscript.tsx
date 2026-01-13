@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Subtitle, WordDefinition } from '../types';
-import { Mic, Volume2, X, Bookmark, Play, Loader2, RotateCcw, MessageSquare, Edit3, Languages, Sparkles, Wand2, BookOpen, Repeat, AudioWaveform, CheckCircle2, TrendingUp, AlertCircle, StopCircle } from 'lucide-react';
+import { Mic, X, Bookmark, Loader2, RotateCcw, Languages, StopCircle } from 'lucide-react';
 import { AIService } from '../lib/ai/service';
 
 interface InteractiveTranscriptProps {
@@ -50,6 +50,7 @@ const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({
   const [isAssessing, setIsAssessing] = useState(false);
 
   const [showTranslations, setShowTranslations] = useState(true);
+  const coreWords = useRef(new Set(['primary', 'consciously', 'subconsciously', 'trendy', 'authentic', 'fluency', 'context', 'natural', 'phrase']));
 
   // --- Auto-Scroll Logic ---
   useEffect(() => {
@@ -182,6 +183,11 @@ const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({
                             {formatTime(sub.startTime)}
                         </span>
                         {isActive && <div className="w-1 h-1 rounded-full bg-amber-400" />}
+                        {isRecordingThis && (
+                          <span className="text-[10px] uppercase tracking-widest font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
+                            跟读模式
+                          </span>
+                        )}
                     </div>
 
                     {/* Main English Text */}
@@ -194,24 +200,21 @@ const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({
                     `}>
                     {sub.text.split(' ').map((word, wIndex) => {
                         const clean = word.replace(/[^a-zA-Z]/g, '');
-                        // Visual Rule: Underline words > 5 letters in Active Card
-                        const isCore = clean.length > 5; 
+                        const normalized = clean.toLowerCase();
+                        const isCore = coreWords.current.has(normalized) || clean.length > 6;
                         
                         return (
                         <span 
                             key={wIndex}
-                            onClick={(e) => isActive && handleWordClick(word, sub, e)}
+                            onClick={(e) => handleWordClick(word, sub, e)}
                             className={`
                             inline-block mx-0.5 px-0.5 rounded transition-all
-                            ${isActive 
-                                ? 'cursor-pointer' 
-                                : ''
-                            }
-                            ${isActive && isCore 
-                                ? 'border-b-[3px] border-emerald-300/60 hover:border-emerald-500 hover:bg-emerald-50 text-slate-900' 
+                            ${isActive ? 'cursor-pointer' : 'cursor-pointer'}
+                            ${isCore
+                                ? 'font-semibold underline decoration-emerald-300 decoration-[3px] underline-offset-[6px] hover:decoration-emerald-500 hover:bg-emerald-50 text-slate-900'
                                 : 'border-b-2 border-transparent hover:bg-slate-100'
                             }
-                            ${selectedWord?.word === clean && isActive ? 'bg-emerald-100 border-emerald-500' : ''}
+                            ${selectedWord?.word === clean ? 'bg-emerald-100 decoration-emerald-500' : ''}
                             `}
                         >
                             {word}{' '}
