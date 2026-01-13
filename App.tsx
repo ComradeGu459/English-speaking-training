@@ -469,39 +469,23 @@ const App = () => {
         
         {/* Right: Interactive Transcript */}
         <div className="lg:w-[500px] xl:w-[600px] h-full flex-shrink-0 bg-white rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden flex flex-col">
-           <div className="px-6 py-4 border-b border-slate-100 flex flex-wrap justify-between items-center gap-3 bg-white/80 backdrop-blur z-20">
-               <div className="flex items-center gap-2">
-                   <div className="w-8 h-8 bg-pink-50 rounded-lg flex items-center justify-center text-pink-500">
-                       <Sparkles size={18} />
-                   </div>
-                   <div>
-                     <span className="font-bold text-slate-800">动态字幕</span>
-                     <span className="block text-[11px] text-slate-400 font-medium">中英对照 · 智能高亮</span>
-                   </div>
-               </div>
-               
-               <div className="flex items-center gap-2">
-                 <div className="flex bg-slate-100 p-1 rounded-lg">
-                     <button 
-                         onClick={() => setPlaybackMode('continuous')} 
-                         className={`p-1.5 rounded-md transition-all ${playbackMode === 'continuous' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
-                         title="Continuous Play"
-                      >
-                         <PlayCircle size={16} />
-                      </button>
-                     <button 
-                         onClick={() => setPlaybackMode('sentence')} 
-                         className={`p-1.5 rounded-md transition-all ${playbackMode === 'sentence' ? 'bg-white shadow text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
-                         title="Sentence Mode"
-                      >
-                         <Repeat size={16} />
-                      </button>
-                 </div>
-                 <div className="flex items-center gap-1 text-xs font-semibold text-slate-400 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-full">
-                   <Mic size={14} />
-                   跟读练习
-                 </div>
-               </div>
+           <div className="px-6 py-3 border-b border-slate-100 flex justify-end items-center bg-white/80 backdrop-blur z-20">
+             <div className="flex bg-slate-100 p-1 rounded-lg">
+                 <button 
+                     onClick={() => setPlaybackMode('continuous')} 
+                     className={`p-1.5 rounded-md transition-all ${playbackMode === 'continuous' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
+                     title="Continuous Play"
+                  >
+                     <PlayCircle size={16} />
+                  </button>
+                 <button 
+                     onClick={() => setPlaybackMode('sentence')} 
+                     className={`p-1.5 rounded-md transition-all ${playbackMode === 'sentence' ? 'bg-white shadow text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                     title="Sentence Mode"
+                  >
+                     <Repeat size={16} />
+                  </button>
+             </div>
            </div>
 
            <div className="flex-1 overflow-hidden relative">
