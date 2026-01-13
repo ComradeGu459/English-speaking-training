@@ -469,30 +469,23 @@ const App = () => {
         
         {/* Right: Interactive Transcript */}
         <div className="lg:w-[500px] xl:w-[600px] h-full flex-shrink-0 bg-white rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden flex flex-col">
-           <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white/80 backdrop-blur z-20">
-               <div className="flex items-center gap-2">
-                   <div className="w-8 h-8 bg-pink-50 rounded-lg flex items-center justify-center text-pink-500">
-                       <Sparkles size={18} />
-                   </div>
-                   <span className="font-bold text-slate-800">Smart Transcript</span>
-               </div>
-               
-               <div className="flex bg-slate-100 p-1 rounded-lg">
-                   <button 
-                       onClick={() => setPlaybackMode('continuous')} 
-                       className={`p-1.5 rounded-md transition-all ${playbackMode === 'continuous' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
-                       title="Continuous Play"
-                    >
-                       <PlayCircle size={16} />
-                   </button>
-                   <button 
-                       onClick={() => setPlaybackMode('sentence')} 
-                       className={`p-1.5 rounded-md transition-all ${playbackMode === 'sentence' ? 'bg-white shadow text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
-                       title="Sentence Mode"
-                    >
-                       <Repeat size={16} />
-                   </button>
-               </div>
+           <div className="px-6 py-3 border-b border-slate-100 flex justify-end items-center bg-white/80 backdrop-blur z-20">
+             <div className="flex bg-slate-100 p-1 rounded-lg">
+                 <button 
+                     onClick={() => setPlaybackMode('continuous')} 
+                     className={`p-1.5 rounded-md transition-all ${playbackMode === 'continuous' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
+                     title="Continuous Play"
+                  >
+                     <PlayCircle size={16} />
+                  </button>
+                 <button 
+                     onClick={() => setPlaybackMode('sentence')} 
+                     className={`p-1.5 rounded-md transition-all ${playbackMode === 'sentence' ? 'bg-white shadow text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                     title="Sentence Mode"
+                  >
+                     <Repeat size={16} />
+                  </button>
+             </div>
            </div>
 
            <div className="flex-1 overflow-hidden relative">

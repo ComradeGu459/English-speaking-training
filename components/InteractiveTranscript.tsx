@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Subtitle, WordDefinition } from '../types';
-import { Mic, Volume2, X, Bookmark, Play, Loader2, RotateCcw, MessageSquare, Edit3, Languages, Sparkles, Wand2, BookOpen, Repeat, AudioWaveform, CheckCircle2, TrendingUp, AlertCircle, StopCircle } from 'lucide-react';
+import { Mic, X, Bookmark, Loader2, RotateCcw, Languages, StopCircle, Repeat, Sparkles } from 'lucide-react';
 import { AIService } from '../lib/ai/service';
 
 interface InteractiveTranscriptProps {
@@ -50,10 +50,12 @@ const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({
   const [isAssessing, setIsAssessing] = useState(false);
 
   const [showTranslations, setShowTranslations] = useState(true);
+  const coreWords = useRef(new Set(['primary', 'consciously', 'subconsciously', 'trendy', 'authentic', 'fluency', 'context', 'natural', 'phrase']));
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
 
   // --- Auto-Scroll Logic ---
   useEffect(() => {
-    if (activeSubtitleIndex !== -1 && containerRef.current && !selectedWord && !isRecording) {
+    if (autoScrollEnabled && activeSubtitleIndex !== -1 && containerRef.current && !selectedWord && !isRecording) {
        const currentId = subtitles[activeSubtitleIndex]?.id;
        const currentNode = itemsRef.current.get(currentId);
        if (currentNode && containerRef.current) {
@@ -62,7 +64,7 @@ const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({
          container.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
        }
     }
-  }, [activeSubtitleIndex, selectedWord, subtitles, isRecording]);
+  }, [activeSubtitleIndex, autoScrollEnabled, selectedWord, subtitles, isRecording]);
 
   // --- Word Interaction ---
   const handleWordClick = async (word: string, subtitle: Subtitle, e: React.MouseEvent) => {
@@ -139,15 +141,38 @@ const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({
   return (
     <div className="h-full flex flex-col bg-white relative font-sans">
       
-      {/* Floating Toggle */}
-      <div className="absolute top-4 right-6 z-20">
-           <button
-              onClick={() => setShowTranslations(!showTranslations)}
-              className={`p-2 rounded-lg text-xs font-bold transition-all shadow-sm border ${showTranslations ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : 'bg-white text-slate-400 border-slate-200'}`}
-              title="Toggle Translation"
-           >
-              <Languages size={16} /> 
-           </button>
+      {/* Floating Header */}
+      <div className="absolute top-4 left-6 right-6 z-20 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-slate-700 font-bold">
+          <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center">
+            <Sparkles size={16} />
+          </div>
+          <div>
+            <p className="text-sm">动态字幕</p>
+            <p className="text-[11px] text-slate-400 font-medium">中英同步 · 自动滚动</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAutoScrollEnabled(!autoScrollEnabled)}
+            className={`w-9 h-9 rounded-xl border flex items-center justify-center shadow-sm transition-all ${
+              autoScrollEnabled ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-white border-slate-200 text-slate-400'
+            }`}
+            title="Auto Scroll"
+          >
+            <Repeat size={16} />
+          </button>
+          <button
+            onClick={() => setShowTranslations(!showTranslations)}
+            className={`w-9 h-9 rounded-xl border flex items-center justify-center shadow-sm transition-all ${
+              showTranslations ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-white border-slate-200 text-slate-400'
+            }`}
+            title="Toggle Translation"
+          >
+            <Languages size={16} /> 
+          </button>
+        </div>
       </div>
 
       <div 
@@ -155,7 +180,7 @@ const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({
         className="flex-1 overflow-y-auto w-full relative scroll-smooth no-scrollbar px-4 sm:px-6 py-6"
         style={{ scrollBehavior: 'smooth' }}
       >
-        <div className="py-[35vh]">
+        <div className="pt-[18vh] pb-[24vh]">
           {subtitles.map((sub, index) => {
             const isActive = index === activeSubtitleIndex;
             const isRecordingThis = isRecording && recordingSubId === sub.id;
@@ -165,23 +190,34 @@ const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({
               <div 
                 key={sub.id}
                 ref={(el) => { if (el) itemsRef.current.set(sub.id, el); }}
-                className={`
-                  relative mb-6 transition-all duration-300 ease-out rounded-xl
-                  ${isActive 
-                     ? 'bg-[#FFFBF0] border-2 border-amber-200 shadow-lg shadow-amber-100/50 scale-[1.02] z-10' 
-                     : 'bg-transparent border-2 border-transparent hover:bg-slate-50 opacity-60 hover:opacity-100'
-                  }
-                `}
+                className="relative mb-5 flex gap-3 items-start"
                 onClick={() => !isActive && onSeek(sub.startTime)}
               >
-                <div className="p-5">
+                <div className="w-12 text-right pt-2">
+                  <span className={`text-[11px] font-mono font-bold ${isActive ? 'text-amber-500' : 'text-slate-300'}`}>
+                    {formatTime(sub.startTime)}
+                  </span>
+                </div>
+
+                <div className={`
+                  flex-1 transition-all duration-300 ease-out rounded-xl px-4 py-3 border
+                  ${isActive 
+                     ? 'bg-[#FFF5E1] border-amber-300 shadow-md shadow-amber-100/60 scale-[1.01]' 
+                     : 'bg-white border-transparent hover:border-slate-100 hover:bg-slate-50'
+                  }
+                `}>
                     
                     {/* Time & Speaker */}
                     <div className="flex items-center gap-2 mb-2">
-                        <span className={`text-[11px] font-mono font-bold ${isActive ? 'text-amber-500 bg-amber-100 px-1.5 py-0.5 rounded' : 'text-slate-400'}`}>
-                            {formatTime(sub.startTime)}
+                      {isActive && <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                      <span className={`text-xs font-semibold ${isActive ? 'text-amber-600' : 'text-slate-400'}`}>
+                        {sub.speaker || 'Speaker'}
+                      </span>
+                      {isRecordingThis && (
+                        <span className="text-[10px] uppercase tracking-widest font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
+                          跟读模式
                         </span>
-                        {isActive && <div className="w-1 h-1 rounded-full bg-amber-400" />}
+                      )}
                     </div>
 
                     {/* Main English Text */}
@@ -189,29 +225,26 @@ const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({
                         leading-relaxed transition-all duration-300 mb-2
                         ${isActive 
                         ? 'text-lg md:text-xl font-bold text-slate-800' 
-                        : 'text-base font-medium text-slate-500'
+                        : 'text-base font-medium text-slate-600'
                         }
                     `}>
                     {sub.text.split(' ').map((word, wIndex) => {
                         const clean = word.replace(/[^a-zA-Z]/g, '');
-                        // Visual Rule: Underline words > 5 letters in Active Card
-                        const isCore = clean.length > 5; 
+                        const normalized = clean.toLowerCase();
+                        const isCore = coreWords.current.has(normalized) || clean.length > 6;
                         
                         return (
                         <span 
                             key={wIndex}
-                            onClick={(e) => isActive && handleWordClick(word, sub, e)}
+                            onClick={(e) => handleWordClick(word, sub, e)}
                             className={`
                             inline-block mx-0.5 px-0.5 rounded transition-all
-                            ${isActive 
-                                ? 'cursor-pointer' 
-                                : ''
-                            }
-                            ${isActive && isCore 
-                                ? 'border-b-[3px] border-emerald-300/60 hover:border-emerald-500 hover:bg-emerald-50 text-slate-900' 
+                            ${isActive ? 'cursor-pointer' : 'cursor-pointer'}
+                            ${isCore
+                                ? 'font-semibold text-slate-900 bg-emerald-50/80 underline decoration-emerald-300 decoration-[4px] underline-offset-[6px] hover:decoration-emerald-500 hover:bg-emerald-100'
                                 : 'border-b-2 border-transparent hover:bg-slate-100'
                             }
-                            ${selectedWord?.word === clean && isActive ? 'bg-emerald-100 border-emerald-500' : ''}
+                            ${selectedWord?.word === clean ? 'bg-emerald-100 decoration-emerald-500' : ''}
                             `}
                         >
                             {word}{' '}
@@ -232,7 +265,7 @@ const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({
 
                     {/* --- Active Toolbar (Bottom Right) --- */}
                     {isActive && (
-                        <div className="flex items-center justify-between mt-4 pt-3 border-t border-amber-200/40 animate-in fade-in slide-in-from-top-1">
+                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-amber-200/40 animate-in fade-in slide-in-from-top-1">
                             
                             {/* Left: Waveform or Status */}
                             <div className="flex items-center gap-2 h-8 min-w-[100px]">
@@ -288,6 +321,29 @@ const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({
             );
           })}
         </div>
+      </div>
+
+      {/* Floating Quick Actions */}
+      <div className="absolute bottom-6 right-6 flex flex-col gap-2 z-20">
+        <button
+          onClick={() => setAutoScrollEnabled(!autoScrollEnabled)}
+          className={`px-3 py-1.5 rounded-full text-xs font-semibold border shadow-sm transition-all ${
+            autoScrollEnabled ? 'bg-white text-slate-600 border-slate-200' : 'bg-slate-100 text-slate-400 border-slate-200'
+          }`}
+        >
+          自动
+        </button>
+        <button
+          onClick={() => {
+            const activeSub = subtitles[activeSubtitleIndex];
+            if (activeSub) {
+              toggleRecording(activeSub.id);
+            }
+          }}
+          className="px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-600 text-white shadow-md"
+        >
+          跟读模式
+        </button>
       </div>
 
       {/* --- Definition Popup (Optimized) --- */}
