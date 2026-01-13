@@ -24,6 +24,8 @@ export interface VideoContent {
   date: string;
   description: string;
   subtitles: Subtitle[];
+  videoUrl?: string; // For local video playback (Blob URL)
+  progress?: number; // 0-100 percentage
 }
 
 export interface WordDefinition {

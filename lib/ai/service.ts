@@ -1,12 +1,13 @@
 import { aiManager } from './request-manager';
-import { WordDefinition } from '../../types';
+import { WordDefinition, Subtitle } from '../../types';
 
 // Prompt Versioning for Cache Invalidation
 const PROMPT_VERSIONS = {
   definition: 'v1.0',
   explain: 'v1.0',
   rewrite: 'v1.0',
-  translate: 'v1.0'
+  translate: 'v1.0',
+  asr: 'v1.0'
 };
 
 export const AIService = {
@@ -69,5 +70,48 @@ export const AIService = {
       },
       PROMPT_VERSIONS.rewrite
     );
+  },
+
+  /**
+   * Translate text to Chinese.
+   */
+  async translateText(text: string): Promise<{ translation: string }> {
+    return aiManager.schedule(
+      'translation',
+      text,
+      {
+        prompt: `Translate the following English text to natural, fluent Chinese: "${text}". Return JSON: { "translation": "..." }`,
+        jsonMode: true
+      },
+      PROMPT_VERSIONS.translate
+    );
+  },
+
+  /**
+   * Simulate generating subtitles for a duration.
+   * In a real app with Gemini 1.5 Pro, we would upload the video file.
+   * Here we simulate "intelligent" generation or filler text.
+   */
+  async generateSubtitlesSimulation(duration: number, topic: string): Promise<Subtitle[]> {
+      // Simulate API latency
+      await new Promise(r => setTimeout(r, 2000));
+
+      const subs: Subtitle[] = [];
+      const interval = 5; // seconds
+      const count = Math.ceil(duration / interval);
+      
+      for(let i=0; i<count; i++) {
+          const startTime = i * interval;
+          const endTime = Math.min((i + 1) * interval, duration);
+          subs.push({
+              id: `gen-${Date.now()}-${i}`,
+              startTime,
+              endTime,
+              text: `[AI Generated Audio Analysis ${i+1}] discussing ${topic}...`,
+              translation: "",
+              speaker: "AI"
+          });
+      }
+      return subs;
   }
 };

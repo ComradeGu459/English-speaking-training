@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Subtitle, WordDefinition } from '../types';
-import { Mic, Repeat, Volume2, X, Bookmark, Play, Loader2, RotateCcw, MessageSquare, Edit3, ChevronDown } from 'lucide-react';
+import { Mic, Volume2, X, Bookmark, Play, Loader2, RotateCcw, MessageSquare, Edit3, Languages, Sparkles, Wand2, BookOpen, Repeat, AudioWaveform, CheckCircle2, TrendingUp, AlertCircle, StopCircle } from 'lucide-react';
 import { AIService } from '../lib/ai/service';
 
 interface InteractiveTranscriptProps {
@@ -8,48 +8,69 @@ interface InteractiveTranscriptProps {
   currentTime: number;
   onSeek: (time: number) => void;
   onSaveWord: (wordDef: WordDefinition, subtitleId: string) => void;
+  onUpdateSubtitles?: (newSubtitles: Subtitle[]) => void;
+  videoDuration?: number;
+  isPlaying: boolean;
+  playbackMode: 'continuous' | 'sentence';
 }
 
 const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({ 
   subtitles, 
   currentTime, 
   onSeek,
-  onSaveWord
+  onSaveWord,
+  onUpdateSubtitles,
+  videoDuration = 300,
+  isPlaying,
+  playbackMode
 }) => {
-  const activeSubtitleIndex = subtitles.findIndex(
-    (sub) => currentTime >= sub.startTime && currentTime < sub.endTime
-  );
+  // --- Active Subtitle Logic ---
+  const activeSubtitleIndex = subtitles.findIndex((sub) => {
+    const isTimeInWindow = currentTime >= sub.startTime && currentTime < sub.endTime;
+    // Keep active if we paused right at the end (Sentence Mode)
+    if (!isTimeInWindow && playbackMode === 'sentence' && !isPlaying) {
+         return currentTime >= sub.endTime - 0.2 && currentTime <= sub.endTime + 0.1;
+    }
+    return isTimeInWindow;
+  });
   
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [selectedWord, setSelectedWord] = useState<{ word: string, subId: string, rect: DOMRect } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const itemsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  // --- State ---
+  const [selectedWord, setSelectedWord] = useState<{ word: string, subId: string } | null>(null);
   const [definition, setDefinition] = useState<WordDefinition | null>(null);
   const [loadingDef, setLoadingDef] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [audioLevel, setAudioLevel] = useState<number[]>(new Array(5).fill(10));
   
-  // Sentence Level AI State
-  const [activeAnalysis, setActiveAnalysis] = useState<{
-    subId: string;
-    type: 'explain' | 'rewrite' | null;
-    data: any | null;
-    loading: boolean;
-  }>({ subId: '', type: null, data: null, loading: false });
+  // Recording & Assessment State
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSubId, setRecordingSubId] = useState<string | null>(null);
+  const [audioLevels, setAudioLevels] = useState<number[]>(new Array(15).fill(5));
+  const [assessmentResult, setAssessmentResult] = useState<{ score: number, feedback: string } | null>(null);
+  const [isAssessing, setIsAssessing] = useState(false);
 
-  // Auto-scroll to active subtitle
+  const [showTranslations, setShowTranslations] = useState(true);
+
+  // --- Auto-Scroll Logic ---
   useEffect(() => {
-    if (activeSubtitleIndex !== -1 && scrollRef.current) {
-      const activeEl = scrollRef.current.children[activeSubtitleIndex] as HTMLElement;
-      if (activeEl) {
-        activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+    if (activeSubtitleIndex !== -1 && containerRef.current && !selectedWord && !isRecording) {
+       const currentId = subtitles[activeSubtitleIndex]?.id;
+       const currentNode = itemsRef.current.get(currentId);
+       if (currentNode && containerRef.current) {
+         const container = containerRef.current;
+         const targetScrollTop = currentNode.offsetTop - (container.clientHeight / 2) + (currentNode.clientHeight / 2);
+         container.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
+       }
     }
-  }, [activeSubtitleIndex]);
+  }, [activeSubtitleIndex, selectedWord, subtitles, isRecording]);
 
+  // --- Word Interaction ---
   const handleWordClick = async (word: string, subtitle: Subtitle, e: React.MouseEvent) => {
+    e.stopPropagation();
     const cleanWord = word.replace(/[.,!?;:"()]/g, '');
     if (!cleanWord) return;
-    const rect = (e.target as HTMLElement).getBoundingClientRect();
-    setSelectedWord({ word: cleanWord, subId: subtitle.id, rect });
+    
+    setSelectedWord({ word: cleanWord, subId: subtitle.id });
     setLoadingDef(true);
     setDefinition(null);
     try {
@@ -62,208 +83,243 @@ const InteractiveTranscript: React.FC<InteractiveTranscriptProps> = ({
     }
   };
 
-  const handleSentenceAction = async (sub: Subtitle, type: 'explain' | 'rewrite') => {
-    if (activeAnalysis.subId === sub.id && activeAnalysis.type === type && activeAnalysis.data) return;
-    
-    setActiveAnalysis({ subId: sub.id, type, data: null, loading: true });
-    
-    try {
-      let result;
-      if (type === 'explain') {
-        result = await AIService.explainSentence(sub.text);
-      } else {
-        result = await AIService.rewriteSentence(sub.text);
-      }
-      setActiveAnalysis({ subId: sub.id, type, data: result, loading: false });
-    } catch (e) {
-      setActiveAnalysis(prev => ({ ...prev, loading: false, data: { error: "Analysis failed" } }));
+  // --- Recording Logic ---
+  const toggleRecording = (subId: string) => {
+    if (isRecording) {
+        stopRecording();
+    } else {
+        startRecording(subId);
     }
   };
+
+  const startRecording = (subId: string) => {
+    setIsRecording(true);
+    setRecordingSubId(subId);
+    setAssessmentResult(null);
+    // In a real app, define MediaRecorder here. 
+  };
+
+  const stopRecording = async () => {
+    setIsRecording(false);
+    setIsAssessing(true);
+    
+    // Simulate AI Assessment
+    setTimeout(async () => {
+        const score = Math.floor(Math.random() * 10) + 90; 
+        const feedback = "Excellent intonation!";
+        setAssessmentResult({ score, feedback });
+        setIsAssessing(false);
+    }, 1200);
+  };
+
+  // Simulate Audio Waveform Animation
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (isRecording) {
+      interval = setInterval(() => {
+          setAudioLevels(prev => prev.map(() => Math.random() * 80 + 10));
+      }, 80);
+    } else {
+        setAudioLevels(new Array(15).fill(5));
+    }
+    return () => clearInterval(interval);
+  }, [isRecording]);
 
   const closePopup = () => {
     setSelectedWord(null);
     setDefinition(null);
   };
 
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    if (isRecording) {
-      interval = setInterval(() => setAudioLevel(prev => prev.map(() => Math.random() * 20 + 5)), 100);
-    } else {
-      setAudioLevel(new Array(5).fill(4));
-    }
-    return () => clearInterval(interval);
-  }, [isRecording]);
+  const formatTime = (time: number) => {
+      const m = Math.floor(time / 60);
+      const s = Math.floor(time % 60);
+      return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
   return (
-    <div className="h-full flex flex-col bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden relative">
-      <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
-        <h2 className="font-bold text-slate-800">Dynamic Subtitles</h2>
-        <div className="flex gap-2">
-          <button className="p-1.5 text-slate-400 hover:text-pink-500 transition-colors">
-            <Repeat size={18} />
-          </button>
+    <div className="h-full flex flex-col bg-white relative font-sans">
+      
+      {/* Floating Toggle */}
+      <div className="absolute top-4 right-6 z-20">
+           <button
+              onClick={() => setShowTranslations(!showTranslations)}
+              className={`p-2 rounded-lg text-xs font-bold transition-all shadow-sm border ${showTranslations ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : 'bg-white text-slate-400 border-slate-200'}`}
+              title="Toggle Translation"
+           >
+              <Languages size={16} /> 
+           </button>
+      </div>
+
+      <div 
+        ref={containerRef} 
+        className="flex-1 overflow-y-auto w-full relative scroll-smooth no-scrollbar px-4 sm:px-6 py-6"
+        style={{ scrollBehavior: 'smooth' }}
+      >
+        <div className="py-[35vh]">
+          {subtitles.map((sub, index) => {
+            const isActive = index === activeSubtitleIndex;
+            const isRecordingThis = isRecording && recordingSubId === sub.id;
+            const hasScore = assessmentResult && recordingSubId === sub.id;
+
+            return (
+              <div 
+                key={sub.id}
+                ref={(el) => { if (el) itemsRef.current.set(sub.id, el); }}
+                className={`
+                  relative mb-6 transition-all duration-300 ease-out rounded-xl
+                  ${isActive 
+                     ? 'bg-[#FFFBF0] border-2 border-amber-200 shadow-lg shadow-amber-100/50 scale-[1.02] z-10' 
+                     : 'bg-transparent border-2 border-transparent hover:bg-slate-50 opacity-60 hover:opacity-100'
+                  }
+                `}
+                onClick={() => !isActive && onSeek(sub.startTime)}
+              >
+                <div className="p-5">
+                    
+                    {/* Time & Speaker */}
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className={`text-[11px] font-mono font-bold ${isActive ? 'text-amber-500 bg-amber-100 px-1.5 py-0.5 rounded' : 'text-slate-400'}`}>
+                            {formatTime(sub.startTime)}
+                        </span>
+                        {isActive && <div className="w-1 h-1 rounded-full bg-amber-400" />}
+                    </div>
+
+                    {/* Main English Text */}
+                    <p className={`
+                        leading-relaxed transition-all duration-300 mb-2
+                        ${isActive 
+                        ? 'text-lg md:text-xl font-bold text-slate-800' 
+                        : 'text-base font-medium text-slate-500'
+                        }
+                    `}>
+                    {sub.text.split(' ').map((word, wIndex) => {
+                        const clean = word.replace(/[^a-zA-Z]/g, '');
+                        // Visual Rule: Underline words > 5 letters in Active Card
+                        const isCore = clean.length > 5; 
+                        
+                        return (
+                        <span 
+                            key={wIndex}
+                            onClick={(e) => isActive && handleWordClick(word, sub, e)}
+                            className={`
+                            inline-block mx-0.5 px-0.5 rounded transition-all
+                            ${isActive 
+                                ? 'cursor-pointer' 
+                                : ''
+                            }
+                            ${isActive && isCore 
+                                ? 'border-b-[3px] border-emerald-300/60 hover:border-emerald-500 hover:bg-emerald-50 text-slate-900' 
+                                : 'border-b-2 border-transparent hover:bg-slate-100'
+                            }
+                            ${selectedWord?.word === clean && isActive ? 'bg-emerald-100 border-emerald-500' : ''}
+                            `}
+                        >
+                            {word}{' '}
+                        </span>
+                        );
+                    })}
+                    </p>
+                    
+                    {/* Translation */}
+                    <div className={`
+                        overflow-hidden transition-all duration-300
+                        ${(showTranslations || isActive) ? 'max-h-24 opacity-100' : 'max-h-0 opacity-0'}
+                    `}>
+                        <div className={`text-sm md:text-base font-medium leading-relaxed ${isActive ? 'text-slate-600' : 'text-slate-400'}`}>
+                            {sub.translation}
+                        </div>
+                    </div>
+
+                    {/* --- Active Toolbar (Bottom Right) --- */}
+                    {isActive && (
+                        <div className="flex items-center justify-between mt-4 pt-3 border-t border-amber-200/40 animate-in fade-in slide-in-from-top-1">
+                            
+                            {/* Left: Waveform or Status */}
+                            <div className="flex items-center gap-2 h-8 min-w-[100px]">
+                                {isRecordingThis ? (
+                                    <div className="flex items-end gap-0.5 h-full py-1">
+                                        {audioLevels.map((h, i) => (
+                                            <div key={i} className="w-1 bg-emerald-400 rounded-full transition-all duration-75" style={{ height: `${Math.max(10, h)}%` }} />
+                                        ))}
+                                    </div>
+                                ) : isAssessing ? (
+                                     <div className="flex items-center gap-2 text-amber-600 text-xs font-bold">
+                                         <Loader2 size={14} className="animate-spin" /> Assessing...
+                                     </div>
+                                ) : hasScore ? (
+                                     <div className="flex items-center gap-2 bg-white px-2 py-1 rounded-lg border border-amber-100 shadow-sm">
+                                         <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 text-xs font-bold">
+                                             {assessmentResult.score}
+                                         </div>
+                                         <span className="text-xs text-slate-500 font-medium truncate max-w-[120px]">{assessmentResult.feedback}</span>
+                                     </div>
+                                ) : (
+                                    <span className="text-[10px] text-amber-400/80 font-bold uppercase tracking-wider">Ready to Speak</span>
+                                )}
+                            </div>
+
+                            {/* Right: Actions */}
+                            <div className="flex items-center gap-1">
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); onSeek(sub.startTime); }}
+                                    className="p-2 rounded-full hover:bg-white hover:shadow-sm text-slate-400 hover:text-amber-600 transition-all"
+                                    title="Repeat Sentence"
+                                >
+                                    <RotateCcw size={18} strokeWidth={2.5} />
+                                </button>
+                                
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); toggleRecording(sub.id); }}
+                                    className={`p-2 rounded-full transition-all shadow-sm flex items-center gap-2
+                                        ${isRecordingThis 
+                                        ? 'bg-red-500 text-white shadow-red-200 animate-pulse' 
+                                        : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200'
+                                        }
+                                    `}
+                                    title="Shadowing Record"
+                                >
+                                    {isRecordingThis ? <StopCircle size={18} fill="currentColor" /> : <Mic size={18} />}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-6 transcript-scroll">
-        {subtitles.map((sub, index) => {
-          const isActive = index === activeSubtitleIndex;
-          const isAnalysisActive = activeAnalysis.subId === sub.id;
-
-          return (
-            <div 
-              key={sub.id} 
-              className={`transition-all duration-300 rounded-xl p-3 cursor-pointer group
-                ${isActive ? 'bg-amber-50 border border-amber-100 shadow-sm' : 'hover:bg-slate-50 border border-transparent'}
-              `}
-            >
-              <div className="flex justify-between items-start mb-1">
-                <span className={`text-xs font-medium ${isActive ? 'text-amber-500' : 'text-slate-400'}`}>
-                  {new Date(sub.startTime * 1000).toISOString().substr(14, 5)}
-                </span>
-                {isActive && (
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); onSeek(sub.startTime); }} 
-                    className="p-1.5 bg-amber-100 text-amber-600 rounded-full hover:bg-amber-200"
-                  >
-                    <RotateCcw size={14} />
-                  </button>
-                )}
-              </div>
-
-              <div className={`text-lg leading-relaxed mb-2 font-medium ${isActive ? 'text-slate-900' : 'text-slate-600'}`}>
-                {sub.text.split(' ').map((word, wIndex) => (
-                  <span 
-                    key={wIndex}
-                    onClick={(e) => handleWordClick(word, sub, e)}
-                    className="hover:text-pink-600 hover:bg-pink-50 rounded px-0.5 transition-colors cursor-pointer inline-block"
-                  >
-                    {word}{' '}
-                  </span>
-                ))}
-              </div>
-
-              <div className={`text-sm ${isActive ? 'text-slate-600' : 'text-slate-400'}`}>
-                {sub.translation}
-              </div>
-
-              {isActive && (
-                <div className="mt-3 flex gap-2">
-                   <button 
-                     onClick={(e) => { e.stopPropagation(); handleSentenceAction(sub, 'explain'); }}
-                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all
-                       ${isAnalysisActive && activeAnalysis.type === 'explain' ? 'bg-indigo-100 text-indigo-700' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}
-                     `}
-                   >
-                     <MessageSquare size={14} /> Explain
-                   </button>
-                   <button 
-                     onClick={(e) => { e.stopPropagation(); handleSentenceAction(sub, 'rewrite'); }}
-                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all
-                       ${isAnalysisActive && activeAnalysis.type === 'rewrite' ? 'bg-emerald-100 text-emerald-700' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}
-                     `}
-                   >
-                     <Edit3 size={14} /> Rewrite
-                   </button>
-                </div>
-              )}
-
-              {/* Analysis Result Display */}
-              {isAnalysisActive && (
-                <div className="mt-3 bg-white rounded-lg border border-slate-100 p-4 shadow-sm animate-in fade-in slide-in-from-top-2">
-                  {activeAnalysis.loading ? (
-                    <div className="flex items-center gap-2 text-slate-400 text-sm">
-                      <Loader2 size={16} className="animate-spin" />
-                      <span>Thinking...</span>
-                    </div>
-                  ) : activeAnalysis.data ? (
-                    <div className="text-sm">
-                      {activeAnalysis.type === 'explain' && (
-                        <div className="space-y-2">
-                          <p className="font-medium text-indigo-900">{activeAnalysis.data.explanation}</p>
-                          <div className="flex flex-wrap gap-2">
-                            {activeAnalysis.data.grammarPoints?.map((p: string, i: number) => (
-                              <span key={i} className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-xs">{p}</span>
-                            ))}
-                          </div>
-                          <p className="text-slate-500 italic text-xs">Tone: {activeAnalysis.data.nuance}</p>
-                        </div>
-                      )}
-                      {activeAnalysis.type === 'rewrite' && (
-                        <div className="grid grid-cols-1 gap-2">
-                          <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                             <span className="text-xs font-bold text-slate-400 uppercase">Formal</span>
-                             <p className="text-slate-700">{activeAnalysis.data.formal}</p>
-                          </div>
-                          <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                             <span className="text-xs font-bold text-slate-400 uppercase">Casual</span>
-                             <p className="text-slate-700">{activeAnalysis.data.casual}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              )}
-
-              {isActive && (
-                <div className="mt-4 pt-3 border-t border-amber-100 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <button className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200">
-                      <Play size={14} fill="currentColor" />
-                    </button>
-                    <button 
-                      onClick={() => setIsRecording(!isRecording)}
-                      className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${isRecording ? 'bg-red-500 text-white recording-pulse' : 'bg-red-100 text-red-500 hover:bg-red-200'}`}
-                    >
-                      <Mic size={14} />
-                    </button>
-                    {isRecording && (
-                       <div className="flex items-end gap-0.5 h-4">
-                         {audioLevel.map((h, i) => (
-                           <div key={i} className="w-1 bg-red-400 rounded-t" style={{ height: `${h}px`, transition: 'height 0.1s' }} />
-                         ))}
-                       </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
+      {/* --- Definition Popup (Optimized) --- */}
       {selectedWord && (
-        <div className="absolute inset-0 bg-black/10 backdrop-blur-[1px] z-50 flex items-center justify-center p-4" onClick={closePopup}>
-          <div className="bg-white w-full max-w-sm rounded-2xl shadow-xl border border-slate-100 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="p-5">
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <h3 className="text-2xl font-bold text-slate-800">{selectedWord.word}</h3>
-                  {definition?.ipa && <span className="text-slate-500 text-sm font-mono mt-1 block">{definition.ipa}</span>}
-                </div>
-                <button onClick={closePopup} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+        <div className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/10 backdrop-blur-[2px] animate-in fade-in duration-200" onClick={closePopup}>
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl border border-slate-100 overflow-hidden ring-4 ring-slate-900/5" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 relative">
+              <button onClick={closePopup} className="absolute top-3 right-3 p-1.5 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"><X size={18} /></button>
+              
+              <div className="mb-4">
+                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-1 block">Word Definition</span>
+                <h3 className="text-3xl font-extrabold text-slate-800 tracking-tight">{selectedWord.word}</h3>
+                {definition?.ipa && <span className="text-sm font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded inline-block mt-1">{definition.ipa}</span>}
               </div>
+
               {loadingDef ? (
-                <div className="py-8 flex flex-col items-center justify-center text-pink-500 gap-2">
-                  <Loader2 className="animate-spin" size={24} />
-                  <span className="text-xs font-medium">Asking AI (Cached)...</span>
+                <div className="py-8 flex flex-col items-center justify-center text-slate-400 gap-2">
+                  <Loader2 className="animate-spin text-emerald-500" size={24} />
+                  <span className="text-xs font-bold uppercase tracking-widest opacity-60">Thinking...</span>
                 </div>
               ) : definition ? (
                 <div className="space-y-4">
-                  <div className="bg-pink-50 p-3 rounded-xl border border-pink-100">
-                    <span className="text-xs font-bold text-pink-500 uppercase tracking-wider block mb-1">Meaning</span>
-                    <p className="text-slate-800 font-medium">{definition.meaning}</p>
+                  <p className="text-lg text-slate-800 font-bold leading-snug">{definition.meaning}</p>
+                  <div className="bg-emerald-50/50 p-3 rounded-lg border border-emerald-100/50">
+                    <p className="text-slate-600 italic text-sm">"{definition.example}"</p>
                   </div>
-                  <div>
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Example</span>
-                    <p className="text-slate-600 italic text-sm border-l-2 border-slate-200 pl-3">"{definition.example}"</p>
-                  </div>
-                  <button onClick={() => { onSaveWord(definition, selectedWord.subId); closePopup(); }} className="w-full mt-2 bg-slate-900 text-white py-2.5 rounded-xl font-medium hover:bg-slate-800 flex items-center justify-center gap-2 transition-colors"><Bookmark size={16} /> Save to Flashcards</button>
+                  <button onClick={() => { onSaveWord(definition, selectedWord.subId); closePopup(); }} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-black transition-all">
+                    <Bookmark size={18} /> Save Word
+                  </button>
                 </div>
               ) : (
-                <div className="text-red-500 text-center py-4">Failed to load.<p className="text-xs text-slate-400 mt-2">Check Settings for API Keys.</p></div>
+                <p className="text-sm text-slate-400 text-center py-4">Definition unavailable.</p>
               )}
             </div>
           </div>

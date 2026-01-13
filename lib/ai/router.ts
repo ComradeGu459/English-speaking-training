@@ -95,7 +95,7 @@ export class AIRouter {
     return queue;
   }
 
-  async dispatch<T>(task: TaskType, req: GenRequest, isJson: boolean): Promise<GenResponse<T>> {
+  async dispatch<T>(task: TaskType, req: GenRequest, isJson: boolean, forceProvider?: ProviderType): Promise<GenResponse<T>> {
     this.refreshProviders();
 
     // Special handling for TTS
@@ -105,12 +105,22 @@ export class AIRouter {
         if (!provider || !provider.synthesizeSpeech) {
              throw new Error("Selected provider does not support Speech Synthesis");
         }
-        // TTS usually returns ArrayBuffer, not GenResponse structure directly in this app flow yet, 
-        // but for compatibility we might need to adjust or call synthesizeSpeech directly.
-        // For this Router method, we assume text generation unless specialized.
-        // If the caller wants TTS, they should call `router.synthesize(...)` ideally, 
-        // but here we just throw if the dispatch was used incorrectly for binary data.
         throw new Error("Use synthesizeSpeech() for TTS tasks");
+    }
+
+    // If a specific provider is forced (e.g., for import analysis)
+    if (forceProvider) {
+        const provider = this.providers.get(forceProvider);
+        if (!provider) throw new Error(`Forced provider '${forceProvider}' is not configured or disabled.`);
+        try {
+            const result = isJson 
+              ? await provider.generateJson<T>(req) 
+              : await provider.generateText(req) as any;
+            return result;
+        } catch (error) {
+            console.error(`[Router] Forced provider ${forceProvider} failed:`, error);
+            throw error;
+        }
     }
 
     const queue = this.getPriorityQueue(task);
